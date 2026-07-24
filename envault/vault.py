@@ -63,9 +63,19 @@ class VaultDB:
 
         self._connection.commit()
 
+    def rename_file(self, internal_path: Path, new_path: Path):
+        self._connection.execute(
+            "UPDATE files SET path = ? WHERE path = ?",
+            (
+                new_path.as_posix(),
+                internal_path.as_posix(),
+            ),
+        )
+
+        self._connection.commit()
+
     def get_files(self) -> list[Path]:
         cursor = self._connection.execute("SELECT path FROM files ORDER BY path")
-
         return [Path(row[0]) for row in cursor.fetchall()]
 
     def clean(self):

@@ -5,6 +5,9 @@ from io import BytesIO
 from imgui_bundle import imgui, portable_file_dialogs as pfd
 
 import pyperclip
+import subprocess
+import shutil
+import platform
 
 
 @contextmanager
@@ -76,32 +79,100 @@ def get_clipboard_bytes():
     return None
 
 
+def set_clipboard_bytes(contents: bytes):
+    try:
+        image = Image.open(BytesIO(contents))
+        image.verify()
+    except Exception:
+        pyperclip.copy(contents.decode("utf-8"))
+        return
+
+    system = platform.system()
+
+    if system == "Linux":
+        if shutil.which("wl-copy"):
+            subprocess.run(
+                ["wl-copy", "--type", str(image.get_format_mimetype())],
+                input=contents,
+                check=True,
+            )
+            return
+
+        if shutil.which("xclip"):
+            subprocess.run(
+                [
+                    "xclip",
+                    "-selection",
+                    "clipboard",
+                    "-t",
+                    str(image.get_format_mimetype()),
+                    "-i",
+                ],
+                input=contents,
+                check=True,
+            )
+            return
+
+        raise RuntimeError("Neither wl-copy nor xclip is installed.")
+
+    elif system == "Windows":
+        import win32clipboard
+
+        image = Image.open(BytesIO(contents))
+        output = BytesIO()
+        image.convert("RGB").save(output, "BMP")
+
+        dib = output.getvalue()[14:]
+
+        win32clipboard.OpenClipboard()
+        try:
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(
+                win32clipboard.CF_DIB,
+                dib,
+            )
+        finally:
+            win32clipboard.CloseClipboard()
+
+    else:
+        raise NotImplementedError(f"Unsupported platform: {system}")
+
+
 class PopupManager:
     POPUP_NONE = 0
     POPUP_SUBMIT = 1
     POPUP_CANCEL = 2
 
     def __init__(self):
-        self._show_popup_names = set()
+        self._show_popup = None
         self._popup_states = defaultdict(lambda: {})
 
         self._current_popup = None
+        self._showing_popup = False
 
     def begin(self, name: str, flags: int = imgui.WindowFlags_.no_saved_settings):
-        if name in self._show_popup_names:
+        if name == self._show_popup:
             imgui.open_popup(name)
-            self._show_popup_names.remove(name)
+            self._show_popup = None
 
         visible, _ = imgui.begin_popup_modal(name, True, flags)
         if visible:
             self._current_popup = name
+            self._showing_popup = True
+        else:
+            self._showing_popup = False
         return visible
 
     def end(self):
         ret_status = self.POPUP_NONE
 
         imgui.dummy(
-            (get_button_width("Submit") + get_button_width("Cancel") + get_spacing_width() * 2, 0)
+            (
+                get_button_width("Submit")
+                + get_button_width("Cancel")
+                + get_spacing_width() * 2,
+                0,
+            )
         )
         button_height = imgui.get_frame_height_with_spacing()
         remaining = imgui.get_content_region_avail().y - button_height
@@ -111,12 +182,19 @@ class PopupManager:
         if imgui.button("Submit", get_fill_width(0.5)):
             imgui.close_current_popup()
             ret_status = self.POPUP_SUBMIT
+            self._showing_popup = False
 
         imgui.same_line()
 
         if imgui.button("Cancel", get_fill_width()):
             imgui.close_current_popup()
             ret_status = self.POPUP_CANCEL
+            self._showing_popup = False
+
+        if imgui.shortcut(imgui.Key.escape):
+            imgui.close_current_popup()
+            ret_status = self.POPUP_CANCEL
+            self._showing_popup = False
 
         imgui.end_popup()
 
@@ -125,7 +203,12 @@ class PopupManager:
         return ret
 
     def show(self, name: str):
-        self._show_popup_names.add(name)
+        if not self._showing_popup:
+            self._show_popup = name
+
+    def set_value(self, popup: str, label: str, value):
+        state = self._popup_states[popup]
+        state[label] = value
 
     def add_text_input(self, label: str, default: str = "", **kwargs):
         if self._current_popup is None:

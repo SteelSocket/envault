@@ -15,6 +15,7 @@ class Inspector:
         try:
             image = Image.open(BytesIO(data)).convert("RGB")
             self._content = np.array(image)
+            self._image_params = immvision.ImageParams()
         except:
             self._content = data.decode()
 
