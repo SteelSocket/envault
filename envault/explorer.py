@@ -17,6 +17,7 @@ from envault.common import (
 class Explorer:
     VAULT_OPEN = "Open Vault"
     VAULT_SAVE_AS = "Save As"
+    VAULT_CLEAN = "Clean Vault"
     VAULT_EXIT = "Exit Vault"
     FILE_ADD = "Add File"
     FILE_REMOVE = "Remove File"
@@ -57,6 +58,10 @@ class Explorer:
             imgui.Key.mod_ctrl | imgui.Key.s, imgui.InputFlags_.route_global
         ):
             self.pm.show(self.VAULT_SAVE_AS)
+        if imgui.shortcut(
+            imgui.Key.mod_ctrl | imgui.Key.c, imgui.InputFlags_.route_global
+        ):
+            self.pm.show(self.VAULT_EXIT)
         if imgui.shortcut(
             imgui.Key.mod_ctrl | imgui.Key.q, imgui.InputFlags_.route_global
         ):
@@ -109,6 +114,12 @@ class Explorer:
             imgui.separator()
 
             if imgui.menu_item_simple(
+                "Clean", "Ctrl+C", enabled=not self._vault is None
+            ):
+                print("Clean")
+                self.pm.show(self.VAULT_EXIT)
+
+            if imgui.menu_item_simple(
                 "Exit", "Ctrl+Q", enabled=not self._vault is None
             ):
                 print("Exit")
@@ -156,6 +167,15 @@ class Explorer:
             if status == PopupManager.POPUP_SUBMIT:
                 with exception_dialog():
                     self.vault_save_as(result["Vault Path"])
+
+        elif self.pm.begin(self.VAULT_CLEAN):
+            imgui.text(
+                "Confirm to clean the vault? (Removes deleted files from vault perminantly)"
+            )
+            status, result = self.pm.end()
+            if status == PopupManager.POPUP_SUBMIT:
+                assert not self._vault is None
+                self._vault.clean()
 
         elif self.pm.begin(self.VAULT_EXIT):
             imgui.text("Confirm to exit the Vault?")
@@ -256,9 +276,9 @@ class Explorer:
     def __draw_file_tree(self):
         if self._vault is None:
             return
-        files = self._vault.get_files()
+        total_files = self._vault.get_files()
         dir_files = defaultdict(lambda: [])
-        for file in files:
+        for file in total_files:
             dir_files[file.parent].append(file)
 
         for dir, files in dir_files.items():
@@ -272,6 +292,16 @@ class Explorer:
                     self.pm.show(self.FILE_ADD)
                 imgui.end_popup()
 
+            if imgui.begin_drag_drop_target():
+                payload = imgui.accept_drag_drop_payload_py_id("str")
+                if payload:
+                    src = total_files[payload.data_id]
+                    dst = dir / src.name
+                    with exception_dialog():
+                        self._vault.rename_file(src, dst)
+
+                imgui.end_drag_drop_target()
+
             if not opened:
                 continue
 
@@ -279,9 +309,15 @@ class Explorer:
                 clicked, _ = imgui.selectable(
                     file.name, p_selected=(self._selected_file == file)
                 )
+
                 if clicked:
                     self._selected_file = file
                     self._cb(self._vault.read_file(file))
+
+                if imgui.begin_drag_drop_source():
+                    imgui.set_drag_drop_payload_py_id("str", total_files.index(file))
+                    imgui.text(file.name)
+                    imgui.end_drag_drop_source()
 
                 if imgui.begin_popup_context_item():
                     if imgui.menu_item_simple("Remove"):

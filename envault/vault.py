@@ -14,6 +14,8 @@ class VaultDB:
         self._connection.execute("SELECT count(*) FROM sqlite_master;").fetchone()
         self.__create_tables()
 
+        self._files_cache = None
+
     def __create_tables(self):
         self._connection.execute("""
             CREATE TABLE IF NOT EXISTS files (
@@ -54,6 +56,7 @@ class VaultDB:
         )
 
         self._connection.commit()
+        self._files_cache = None
 
     def remove_file(self, internal_path: Path):
         self._connection.execute(
@@ -62,6 +65,7 @@ class VaultDB:
         )
 
         self._connection.commit()
+        self._files_cache = None
 
     def rename_file(self, internal_path: Path, new_path: Path):
         self._connection.execute(
@@ -73,10 +77,15 @@ class VaultDB:
         )
 
         self._connection.commit()
+        self._files_cache = None
 
     def get_files(self) -> list[Path]:
+        if not self._files_cache is None:
+            return self._files_cache
+
         cursor = self._connection.execute("SELECT path FROM files ORDER BY path")
-        return [Path(row[0]) for row in cursor.fetchall()]
+        self._files_cache = [Path(row[0]) for row in cursor.fetchall()]
+        return self._files_cache
 
     def clean(self):
         self._connection.execute("VACUUM;")

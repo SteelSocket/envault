@@ -184,6 +184,11 @@ class PopupManager:
             ret_status = self.POPUP_SUBMIT
             self._showing_popup = False
 
+        if imgui.shortcut(imgui.Key.enter):
+            imgui.close_current_popup()
+            ret_status = self.POPUP_SUBMIT
+            self._showing_popup = False
+
         imgui.same_line()
 
         if imgui.button("Cancel", get_fill_width()):
