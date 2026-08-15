@@ -4,10 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "envault"
-version = "0.1.1"
+version = "0.2.0"
 description = "Encrypted Vault"
 readme = "README.md"
 requires-python = ">=3.10"
+dependencies = [
+    "certifi==2026.6.17",
+    "charset-normalizer==3.4.9",
+    "idna==3.18",
+    "imgui-bundle==1.92.801",
+    "numpy==2.5.1",
+    "pillow==12.3.0",
+    "pyperclip==1.11.0",
+    "requests==2.34.2",
+    "sqlcipher3==0.6.2",
+    "urllib3==2.7.0",
+    'pywin32>=308; sys_platform == "win32"',
+]
 
 [project.scripts]
 envault = "envault.__main__:main"

@@ -1,6 +1,7 @@
 from pathlib import Path
 from imgui_bundle import hello_imgui, immvision, imgui
 
+from envault.context import AppContext
 from envault.explorer import Explorer
 from envault.inspector import Inspector
 
@@ -9,12 +10,14 @@ import argparse
 
 class App:
     def __init__(self):
-        self.explorer = Explorer(self._on_file_select)
-        self.inspector = Inspector()
+        self.ctx = AppContext()
+        self.explorer = Explorer(self.ctx)
+        self.inspector = Inspector(self.ctx)
 
     def gui(self):
         self.explorer.draw()
         self.inspector.draw()
+        self.ctx.pm.draw()
 
         if imgui.shortcut(
             imgui.Key.mod_ctrl | imgui.Key.q, imgui.InputFlags_.route_global
@@ -24,8 +27,10 @@ class App:
     def set_vault(self, vault: Path, password: str):
         self.explorer.open_vault(vault.as_posix(), password)
 
-    def _on_file_select(self, data: bytes):
-        self.inspector.set_content(data)
+
+def __load_font():
+    hello_imgui.imgui_default_settings.load_default_font_with_font_awesome_icons()
+    imgui.get_io().fonts.add_font_default()
 
 
 def get_runner_params(app: App):
@@ -37,6 +42,9 @@ def get_runner_params(app: App):
     params.app_window_params.restore_previous_geometry = True
     params.ini_folder_type = hello_imgui.IniFolderType.app_user_config_folder
     params.ini_filename = "envault/imgui.ini"
+    params.dpi_aware_params.dpi_window_size_factor = 1.5
+    params.callbacks.default_icon_font = hello_imgui.DefaultIconFont.font_awesome6
+    params.callbacks.load_additional_fonts = __load_font
 
     split_inspector = hello_imgui.DockingSplit()
     split_inspector.initial_dock = "MainDockSpace"
@@ -89,7 +97,7 @@ def get_args():
     if args.password is None:
         parser.error("vault_path and password must be provided together.")
 
-    if not args.vault_path.is_file():
+    if args.vault_path.is_dir():
         parser.error("The given vault_path is not a valid file")
 
     return args
