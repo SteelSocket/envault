@@ -45,6 +45,22 @@ class VaultDB:
                     ON DELETE CASCADE
             );
         """)
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS metadata (
+                name TEXT NOT NULL,
+                dir TEXT NOT NULL,
+
+                key TEXT NOT NULL,
+                value TEXT,
+
+                PRIMARY KEY (name, dir, key),
+
+                FOREIGN KEY (name, dir)
+                    REFERENCES files(name, dir)
+                    ON UPDATE CASCADE
+                    ON DELETE CASCADE
+            );
+        """)
         self._connection.commit()
 
     def add_directory(self, path: Path):
@@ -84,6 +100,18 @@ class VaultDB:
         self._connection.commit()
         self._files_cache = None
 
+    def add_metadata(self, path: Path, key: str, value: str):
+        path = self.__ensure_root(path)
+
+        self._connection.execute(
+            """
+            INSERT OR REPLACE INTO metadata(name, dir, key, value)
+            VALUES (?, ?, ?, ?)
+            """,
+            (path.name, path.parent.as_posix(), key, value),
+        )
+        self._connection.commit()
+
     def remove_directory(self, path: Path):
         path = self.__ensure_root(path)
 
@@ -99,25 +127,18 @@ class VaultDB:
     def remove_file(self, path: Path):
         self._connection.execute(
             "DELETE FROM files WHERE name = ? AND dir = ?",
-            (
-                path.name,
-                path.parent.as_posix(),
-            ),
+            (path.name, path.parent.as_posix()),
         )
 
         self._connection.commit()
         self._files_cache = None
 
-    def rename_file(self, src: Path, dst_name: str):
-        src = self.__ensure_root(src)
-
+    def remove_metadata(self, path: Path, key: str):
         self._connection.execute(
-            "UPDATE files SET name = ? WHERE name = ? AND dir = ?",
-            (dst_name, src.name, src.parent.as_posix()),
+            "DELETE FROM metadata WHERE name = ? AND dir = ? AND key = ?",
+            (path.name, path.parent.as_posix(), key),
         )
-
         self._connection.commit()
-        self._files_cache = None
 
     def rename_directory(self, src: Path, dst_name: str):
         src = self.__ensure_root(src)
@@ -131,19 +152,25 @@ class VaultDB:
         self._files_cache = None
         self._dir_cache = None
 
-    def read_file(self, path: Path) -> bytes:
-        path = self.__ensure_root(path)
+    def rename_file(self, src: Path, dst_name: str):
+        src = self.__ensure_root(src)
 
-        cursor = self._connection.execute(
-            "SELECT data FROM files WHERE name = ? AND dir = ?",
-            (path.name, path.parent.as_posix()),
+        self._connection.execute(
+            "UPDATE files SET name = ? WHERE name = ? AND dir = ?",
+            (dst_name, src.name, src.parent.as_posix()),
         )
-        row = cursor.fetchone()
 
-        if row is None:
-            raise FileNotFoundError(path)
+        self._connection.commit()
+        self._files_cache = None
 
-        return row[0]
+    def rename_metadata(self, file: Path, key: str, new_key):
+        file = self.__ensure_root(file)
+
+        self._connection.execute(
+            "UPDATE metadata SET key = ? WHERE name = ? AND dir = ? AND key = ?",
+            (new_key, file.name, file.parent.as_posix(), key),
+        )
+        self._connection.commit()
 
     def get_all_files(self) -> list[Path]:
         if not self._files_cache is None:
@@ -188,6 +215,24 @@ class VaultDB:
 
         return [Path(row[0]) for row in cursor.fetchall() if Path(row[0]).parent == dir]
 
+    def get_metadata(self, file: Path):
+        file = self.__ensure_root(file)
+
+        cursor = self._connection.execute(
+            """
+            SELECT key, value
+            FROM metadata
+            WHERE name = ? AND dir = ?
+            ORDER BY key
+            """,
+            (
+                file.name,
+                file.parent.as_posix(),
+            ),
+        )
+
+        return {k: v for k, v in cursor.fetchall()}
+
     def get_rowid_by_file(self, path: Path) -> int:
         path = self.__ensure_root(path)
 
@@ -214,6 +259,31 @@ class VaultDB:
 
         return Path(result[1]) / Path(result[0])
 
+    def read_file(self, path: Path) -> bytes:
+        path = self.__ensure_root(path)
+
+        cursor = self._connection.execute(
+            "SELECT data FROM files WHERE name = ? AND dir = ?",
+            (path.name, path.parent.as_posix()),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            raise FileNotFoundError(path)
+
+        return row[0]
+
+    def write_file(self, src: Path, data: bytes):
+        src = self.__ensure_root(src)
+        try:
+            self._connection.execute(
+                "UPDATE files SET data = ? WHERE name = ? AND dir = ?",
+                (data, src.name, src.parent.as_posix()),
+            )
+            self._connection.commit()
+        except:
+            pass
+
     def move_file(self, src: Path, dst_dir: Path):
         src = self.__ensure_root(src)
         dst_dir = self.__ensure_root(dst_dir)
@@ -228,17 +298,6 @@ class VaultDB:
             pass
 
         self._files_cache = None
-
-    def write_file(self, src: Path, data: bytes):
-        src = self.__ensure_root(src)
-        try:
-            self._connection.execute(
-                "UPDATE files SET data = ? WHERE name = ? AND dir = ?",
-                (data, src.name, src.parent.as_posix()),
-            )
-            self._connection.commit()
-        except:
-            pass
 
     def clean(self):
         self._connection.execute("VACUUM;")

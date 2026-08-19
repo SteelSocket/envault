@@ -13,11 +13,11 @@ import platform
 
 
 @contextmanager
-def exception_dialog():
+def exception_dialog(msg: str | None = None):
     try:
         yield
     except Exception as e:
-        pfd.message("Error", str(e), _icon=pfd.icon.error)
+        pfd.message("Error", str(e) if msg is None else msg, _icon=pfd.icon.error)
 
 
 def get_spacing_width() -> float:
