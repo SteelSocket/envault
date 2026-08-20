@@ -9,6 +9,7 @@ from envault.common import (
     center_text,
     exception_dialog,
     menu_item_full,
+    next_string_number,
     path_to_label,
 )
 
@@ -284,6 +285,9 @@ class Explorer:
                 self._renaming_path = root
                 self._rename_buffer = root.name
 
+            if is_file and imgui.menu_item_simple(ifa.ICON_FA_COPY + " Duplicate"):
+                self.add_duplicate_file(root)
+
             if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_MINUS + " Delete"):
                 if is_file:
                     self.ctx.vault.remove_file(root)
@@ -298,13 +302,9 @@ class Explorer:
         assert not self.ctx.vault is None
 
         existing = self.ctx.vault.get_files(root)
-        base = "New File"
-        name = base
-        i = 1
-
-        while Path(f"/{name}") in existing:
-            name = f"{base} {i}"
-            i += 1
+        name = next_string_number(
+            "New File", [e.relative_to(root).as_posix() for e in existing]
+        )
 
         file = root / Path(name)
         self.ctx.vault.add_file(file, b"")
@@ -316,19 +316,30 @@ class Explorer:
         assert not self.ctx.vault is None
 
         existing = self.ctx.vault.get_directories(root)
-        base = "New Folder"
-        name = base
-        i = 1
-
-        while Path(f"/{name}") in existing:
-            name = f"{base} {i}"
-            i += 1
+        name = next_string_number(
+            "New Folder", [e.relative_to(root).as_posix() for e in existing]
+        )
 
         dir = root / Path(name)
         self.ctx.vault.add_directory(dir)
         self._renaming_path = dir
         self._rename_buffer = dir.name
         self._uncollapse_path = root
+
+    def add_duplicate_file(self, file: Path):
+        assert not self.ctx.vault is None
+
+        existing = self.ctx.vault.get_files(file.parent)
+        name = next_string_number(
+            file.name + " Copy",
+            [e.relative_to(file.parent).as_posix() for e in existing],
+        )
+
+        dfile = file.parent / Path(name)
+        self.ctx.vault.copy_file(file, name)
+        self._renaming_path = dfile
+        self._rename_buffer = dfile.name
+        self._uncollapse_path = dfile
 
     @property
     def _vault_exists(self):

@@ -299,6 +299,24 @@ class VaultDB:
 
         self._files_cache = None
 
+    def copy_file(self, src: Path, name: str):
+        src = self.__ensure_root(src)
+
+        self._connection.execute(
+            """
+            INSERT INTO files (name, dir, mime_type, data)
+            SELECT ?, dir, mime_type, data
+            FROM files
+            WHERE name = ? AND dir = ?;
+            """,
+            (name, src.name, src.parent.as_posix()),
+        )
+        metadata = self.get_metadata(src)
+        for key, value in metadata.items():
+            self.add_metadata(src.parent / name, key, value)
+
+        self._files_cache = None
+
     def clean(self):
         self._connection.execute("VACUUM;")
         self._connection.commit()

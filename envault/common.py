@@ -142,6 +142,15 @@ def set_clipboard_bytes(contents: bytes):
     else:
         raise NotImplementedError(f"Unsupported platform: {system}")
 
+def next_string_number(base: str, existing: list[str]):
+    name = base
+    i = 1
+
+    while name in existing:
+        name = f"{base} {i}"
+        i += 1
+
+    return name
 
 class PopupManager:
     class InputClass:
