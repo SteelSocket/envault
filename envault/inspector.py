@@ -16,7 +16,8 @@ from envault.common import (
     get_clipboard_bytes,
     menu_item_full,
     set_clipboard_bytes,
-    menu_with_tooltip
+    menu_with_tooltip,
+    next_string_number,
 )
 from envault.context import AppContext
 
@@ -36,6 +37,12 @@ class Inspector:
         self._renaming_value: str | None = None
         self._rename_buffer = ""
         self._rename_started = False
+
+    def _save_contents(self, submitted: bool, _):
+        self._content_modified = False
+        if not submitted:
+            return
+        self.__save()
 
     def __save(self):
         assert self.ctx.vault and self._current_file
@@ -223,7 +230,9 @@ class Inspector:
                     imgui.table_next_column()
                     if self._renaming_value == key:
                         if self.__draw_rename():
-                            with exception_dialog("Conflicting Keys! Key exists with same name!"):
+                            with exception_dialog(
+                                "Conflicting Keys! Key exists with same name!"
+                            ):
                                 self.ctx.vault.rename_metadata(
                                     self._current_file, key, self._rename_buffer
                                 )
@@ -275,13 +284,7 @@ class Inspector:
                 imgui.end_table()
 
             if imgui.button("Add Metadata", (-1, 0)):
-                base = "key"
-                name = base
-                i = 1
-
-                while name in metadata.keys():
-                    name = f"{base} {i}"
-                    i += 1
+                name = next_string_number("Key", list(metadata.keys()))
                 self.ctx.vault.add_metadata(self._current_file, name, "value")
 
             imgui.end_child()
@@ -311,12 +314,6 @@ class Inspector:
             self._image = np.array(image)
         except:
             self._image = None
-
-    def _save_contents(self, submitted: bool, _):
-        self._content_modified = False
-        if not submitted:
-            return
-        self.__save()
 
     def draw(self):
         imgui.begin("Inspector", flags=imgui.WindowFlags_.horizontal_scrollbar)

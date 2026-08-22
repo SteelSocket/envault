@@ -32,59 +32,57 @@ class Explorer:
 
         self._uncollapse_path: Path | None = None
 
-    def __draw_file_tree(self):
-        if self.ctx.vault is None:
+    @property
+    def _vault_exists(self):
+        return not self.ctx.vault is None
+
+    def _on_open_vault(self, submitted: bool, states: dict):
+        if not submitted:
             return
-        tree = {}
+        with exception_dialog():
+            self.open_vault(states["Vault Path"], states["Password"])
 
-        dirs = self.ctx.vault.get_all_directories()
-        for directory in dirs:
-            node = tree
-            current = Path("")
+    def _on_exit_vault(self, submitted: bool, _):
+        if not submitted:
+            return
+        assert not self.ctx.vault is None
 
-            for part in directory.parts:
-                current /= part
-                node = node.setdefault(current, {})
+        with exception_dialog():
+            self.ctx.vault.close()
+            self.ctx.vault = None
+            self.ctx.selected_file = None
 
-        files = self.ctx.vault.get_all_files()
-        for file in files:
-            node = tree
-            current = Path("")
+    def _on_save_vault(self, submitted: bool, states: dict):
+        if not submitted:
+            return
+        with exception_dialog():
+            self.vault_save_as(states["Destination"])
 
-            for part in file.parts[:-1]:
-                current /= part
-                node = node.setdefault(current, {})
+    def __draw_rename(self) -> bool:
+        imgui.set_next_item_width(-1)
 
-            node.setdefault(None, []).append(file)
+        if not self._rename_started:
+            self._rename_started = True
+            imgui.set_keyboard_focus_here()
 
-        if tree.get(Path("/"), {}):
-            self.__draw_tree(tree[Path("/")])
-
-        avail = imgui.get_content_region_avail()
-
-        imgui.begin_child(
-            "##root_file_drop",
-            avail,
-            child_flags=0,
-            window_flags=0,
+        finished, self._rename_buffer = imgui.input_text(
+            "##rename",
+            self._rename_buffer,
+            imgui.InputTextFlags_.enter_returns_true
+            | imgui.InputTextFlags_.auto_select_all,
         )
 
-        self.__draw_window_ctx_menu()
+        if finished:
+            self._renaming_path = None
+            self._rename_started = False
+            return True
 
-        region = imgui.get_content_region_avail()
-        imgui.invisible_button("##drop_target", region)
+        if not imgui.is_item_active() and imgui.is_mouse_clicked(0):
+            self._renaming_path = None
+            self._rename_started = False
+            return True
 
-        if imgui.begin_drag_drop_target():
-            payload = imgui.accept_drag_drop_payload_py_id("str")
-            if payload:
-                file = self.ctx.vault.get_file_by_rowid(payload.data_id)
-                self.ctx.vault.move_file(file, Path("/"))
-            imgui.end_drag_drop_target()
-
-        if len(tree.get(Path("/"), {})) == 0:
-            center_text("Right Click to add files and directories")
-
-        imgui.end_child()
+        return False
 
     def __draw_tree(self, node):
         if self.ctx.vault is None:
@@ -163,31 +161,109 @@ class Explorer:
 
                 self.__draw_file_ctx_menu(file, True)
 
-    def __draw_rename(self) -> bool:
-        imgui.set_next_item_width(-1)
+    def __draw_file_tree(self):
+        if self.ctx.vault is None:
+            return
+        tree = {}
 
-        if not self._rename_started:
-            self._rename_started = True
-            imgui.set_keyboard_focus_here()
+        dirs = self.ctx.vault.get_all_directories()
+        for directory in dirs:
+            node = tree
+            current = Path("")
 
-        finished, self._rename_buffer = imgui.input_text(
-            "##rename",
-            self._rename_buffer,
-            imgui.InputTextFlags_.enter_returns_true
-            | imgui.InputTextFlags_.auto_select_all,
+            for part in directory.parts:
+                current /= part
+                node = node.setdefault(current, {})
+
+        files = self.ctx.vault.get_all_files()
+        for file in files:
+            node = tree
+            current = Path("")
+
+            for part in file.parts[:-1]:
+                current /= part
+                node = node.setdefault(current, {})
+
+            node.setdefault(None, []).append(file)
+
+        if tree.get(Path("/"), {}):
+            self.__draw_tree(tree[Path("/")])
+
+        avail = imgui.get_content_region_avail()
+
+        imgui.begin_child(
+            "##root_file_drop",
+            avail,
+            child_flags=0,
+            window_flags=0,
         )
 
-        if finished:
-            self._renaming_path = None
-            self._rename_started = False
-            return True
+        self.__draw_window_ctx_menu()
 
-        if not imgui.is_item_active() and imgui.is_mouse_clicked(0):
-            self._renaming_path = None
-            self._rename_started = False
-            return True
+        region = imgui.get_content_region_avail()
+        imgui.invisible_button("##drop_target", region)
 
-        return False
+        if imgui.begin_drag_drop_target():
+            payload = imgui.accept_drag_drop_payload_py_id("str")
+            if payload:
+                file = self.ctx.vault.get_file_by_rowid(payload.data_id)
+                self.ctx.vault.move_file(file, Path("/"))
+            imgui.end_drag_drop_target()
+
+        if len(tree.get(Path("/"), {})) == 0:
+            center_text("Right Click to add files and directories")
+
+        imgui.end_child()
+
+    def __draw_window_ctx_menu(self):
+        if self.ctx.vault is None:
+            return
+
+        if imgui.begin_popup_context_window(
+            "window_context",
+            imgui.PopupFlags_.no_open_over_existing_popup,
+        ):
+            if imgui.menu_item_simple(ifa.ICON_FA_FOLDER_PLUS + " New Folder"):
+                self.add_new_directory(Path("/"))
+
+            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_PLUS + " New File"):
+                self.add_new_file(Path("/"))
+
+            imgui.end_popup()
+
+    def __draw_file_ctx_menu(self, root: Path, is_file: bool):
+        if self.ctx.vault is None:
+            return
+
+        if imgui.begin_popup_context_item(
+            (root.as_posix() + "_context"),
+            imgui.PopupFlags_.no_open_over_items
+            | imgui.PopupFlags_.no_open_over_existing_popup,
+        ):
+            if imgui.menu_item_simple(ifa.ICON_FA_FOLDER_PLUS + " New Folder"):
+                self.add_new_directory(root.parent if is_file else root)
+
+            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_PLUS + " New File"):
+                self.add_new_file(root.parent if is_file else root)
+
+            imgui.separator()
+
+            if imgui.menu_item_simple(ifa.ICON_FA_FILE_PEN + " Rename"):
+                self._renaming_path = root
+                self._rename_buffer = root.name
+
+            if is_file and imgui.menu_item_simple(ifa.ICON_FA_COPY + " Duplicate"):
+                self.add_duplicate_file(root)
+
+            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_MINUS + " Delete"):
+                if is_file:
+                    self.ctx.vault.remove_file(root)
+                    if self.ctx.selected_file == root:
+                        self.ctx.selected_file = None
+                else:
+                    self.ctx.vault.remove_directory(root)
+
+            imgui.end_popup()
 
     def __draw_menu(self):
         if not imgui.begin_menu_bar():
@@ -248,55 +324,31 @@ class Explorer:
 
         imgui.end_menu_bar()
 
-    def __draw_window_ctx_menu(self):
-        if self.ctx.vault is None:
-            return
+    def draw(self):
+        imgui.begin("Explorer", flags=imgui.WindowFlags_.menu_bar)
 
-        if imgui.begin_popup_context_window(
-            "window_context",
-            imgui.PopupFlags_.no_open_over_existing_popup,
-        ):
-            if imgui.menu_item_simple(ifa.ICON_FA_FOLDER_PLUS + " New Folder"):
-                self.add_new_directory(Path("/"))
+        self.__draw_menu()
+        self.__draw_file_tree()
 
-            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_PLUS + " New File"):
-                self.add_new_file(Path("/"))
+        imgui.end()
 
-            imgui.end_popup()
+    def open_vault(self, path: str, password: str):
+        vpath = Path(path)
+        if vpath.is_dir():
+            raise RuntimeError("The Given Vault Path is a directory!")
 
-    def __draw_file_ctx_menu(self, root: Path, is_file: bool):
-        if self.ctx.vault is None:
-            return
+        if not self.ctx.vault is None:
+            self.ctx.vault.close()
+        self.ctx.vault = VaultDB(vpath, password)
 
-        if imgui.begin_popup_context_item(
-            (root.as_posix() + "_context"),
-            imgui.PopupFlags_.no_open_over_items
-            | imgui.PopupFlags_.no_open_over_existing_popup,
-        ):
-            if imgui.menu_item_simple(ifa.ICON_FA_FOLDER_PLUS + " New Folder"):
-                self.add_new_directory(root.parent if is_file else root)
+    def vault_save_as(self, path: str):
+        assert not self.ctx.vault is None
 
-            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_PLUS + " New File"):
-                self.add_new_file(root.parent if is_file else root)
+        vpath = Path(path)
+        if vpath.is_dir():
+            raise RuntimeError("The Given Vault Path is a directory!")
 
-            imgui.separator()
-
-            if imgui.menu_item_simple(ifa.ICON_FA_FILE_PEN + " Rename"):
-                self._renaming_path = root
-                self._rename_buffer = root.name
-
-            if is_file and imgui.menu_item_simple(ifa.ICON_FA_COPY + " Duplicate"):
-                self.add_duplicate_file(root)
-
-            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_MINUS + " Delete"):
-                if is_file:
-                    self.ctx.vault.remove_file(root)
-                    if self.ctx.selected_file == root:
-                        self.ctx.selected_file = None
-                else:
-                    self.ctx.vault.remove_directory(root)
-
-            imgui.end_popup()
+        shutil.copy2(self.ctx.vault.path, path)
 
     def add_new_file(self, root: Path):
         assert not self.ctx.vault is None
@@ -340,55 +392,3 @@ class Explorer:
         self._renaming_path = dfile
         self._rename_buffer = dfile.name
         self._uncollapse_path = dfile
-
-    @property
-    def _vault_exists(self):
-        return not self.ctx.vault is None
-
-    def _on_open_vault(self, submitted: bool, states: dict):
-        if not submitted:
-            return
-        with exception_dialog():
-            self.open_vault(states["Vault Path"], states["Password"])
-
-    def _on_exit_vault(self, submitted: bool, _):
-        if not submitted:
-            return
-        assert not self.ctx.vault is None
-
-        with exception_dialog():
-            self.ctx.vault.close()
-            self.ctx.vault = None
-            self.ctx.selected_file = None
-
-    def _on_save_vault(self, submitted: bool, states: dict):
-        if not submitted:
-            return
-        with exception_dialog():
-            self.vault_save_as(states["Destination"])
-
-    def draw(self):
-        imgui.begin("Explorer", flags=imgui.WindowFlags_.menu_bar)
-
-        self.__draw_menu()
-        self.__draw_file_tree()
-
-        imgui.end()
-
-    def open_vault(self, path: str, password: str):
-        vpath = Path(path)
-        if vpath.is_dir():
-            raise RuntimeError("The Given Vault Path is a directory!")
-
-        if not self.ctx.vault is None:
-            self.ctx.vault.close()
-        self.ctx.vault = VaultDB(vpath, password)
-
-    def vault_save_as(self, path: str):
-        assert not self.ctx.vault is None
-
-        vpath = Path(path)
-        if vpath.is_dir():
-            raise RuntimeError("The Given Vault Path is a directory!")
-
-        shutil.copy2(self.ctx.vault.path, path)
