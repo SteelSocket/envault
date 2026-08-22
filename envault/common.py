@@ -48,6 +48,13 @@ def path_to_label(path: Path, prefix: str):
     return f"{path.name}##{prefix}:{path.as_posix()}"
 
 
+def menu_with_tooltip(label: str, tooltip: str):
+    opened = imgui.begin_menu(label)
+    if imgui.is_item_hovered():
+        imgui.set_tooltip(tooltip)
+    return opened
+
+
 def menu_item_full(
     label: str,
     enabled: bool,
@@ -142,6 +149,7 @@ def set_clipboard_bytes(contents: bytes):
     else:
         raise NotImplementedError(f"Unsupported platform: {system}")
 
+
 def next_string_number(base: str, existing: list[str]):
     name = base
     i = 1
@@ -151,6 +159,7 @@ def next_string_number(base: str, existing: list[str]):
         i += 1
 
     return name
+
 
 class PopupManager:
     class InputClass:

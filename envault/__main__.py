@@ -94,11 +94,11 @@ def get_args():
     if args.vault_path is None:
         return args
 
-    if args.password is None:
-        parser.error("vault_path and password must be provided together.")
-
     if args.vault_path.is_dir():
         parser.error("The given vault_path is not a valid file")
+
+    if args.password is None:
+        args.password = input("Enter Vault Password: ")
 
     return args
 

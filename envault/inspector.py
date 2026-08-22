@@ -16,6 +16,7 @@ from envault.common import (
     get_clipboard_bytes,
     menu_item_full,
     set_clipboard_bytes,
+    menu_with_tooltip
 )
 from envault.context import AppContext
 
@@ -60,7 +61,7 @@ class Inspector:
             self.set_file(self._current_file)
             self._content_modified = False
 
-        if imgui.begin_menu(ifa.ICON_FA_FILE_IMPORT):
+        if menu_with_tooltip(ifa.ICON_FA_FILE_IMPORT, "Import"):
             if menu_item_full("File", True, "Import data from file"):
                 file = pfd.open_file("Import File").result()[0]
 
@@ -76,7 +77,7 @@ class Inspector:
 
             imgui.end_menu()
 
-        if imgui.begin_menu(ifa.ICON_FA_FILE_EXPORT):
+        if menu_with_tooltip(ifa.ICON_FA_FILE_EXPORT, "Export"):
             if menu_item_full("File", True, "Export data to file"):
                 save_file = Path(pfd.save_file("Export File").result())
 
