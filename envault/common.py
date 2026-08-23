@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Callable
 from PIL import ImageGrab, Image
 from io import BytesIO
+from dataclasses import dataclass
 
 from imgui_bundle import imgui, portable_file_dialogs as pfd
 
@@ -12,11 +13,18 @@ import shutil
 import platform
 
 
+@dataclass
+class ExceptionResult:
+    ok: bool = True
+
+
 @contextmanager
 def exception_dialog(msg: str | None = None):
+    result = ExceptionResult()
     try:
-        yield
+        yield result
     except Exception as e:
+        result.ok = False
         pfd.message("Error", str(e) if msg is None else msg, _icon=pfd.icon.error)
 
 
@@ -180,7 +188,7 @@ class PopupManager:
         self._states: dict[str, Any] = {}
         self._inputs: list["PopupManager.InputClass"] = []
 
-        self._result_cb: Callable | None = None
+        self._result_cb: Callable[[bool, dict], bool] | None = None
 
     def is_active(self):
         return not self._label is None
@@ -239,6 +247,14 @@ class PopupManager:
 
         self._inputs.append(self.InputClass("widget", "", cb, *args, **kwargs))
         return self
+
+    def __trigger_callback(self, submit: bool):
+        if self._result_cb is None:
+            self.reset()
+            return
+
+        if self._result_cb(submit, self._states):
+            self.reset()
 
     def __draw_text_input(self, label: str, default: str = "", **kwargs):
         contents = self._states.get(label, default)
@@ -324,6 +340,9 @@ class PopupManager:
             elif inp.itype == "widget":
                 inp.value(*inp.args, **inp.kwargs)
 
+        enter_pressed = imgui.is_item_focused() and imgui.is_key_pressed(
+            imgui.Key.enter
+        )
         imgui.dummy(
             (
                 get_button_width("Submit")
@@ -337,18 +356,12 @@ class PopupManager:
         if remaining > 0:
             imgui.dummy((0, remaining))
 
-        if imgui.button("Submit", get_fill_width(0.5)):
-            imgui.close_current_popup()
-            if self._result_cb:
-                self._result_cb(True, self._states)
-            self.reset()
+        if imgui.button("Submit", get_fill_width(0.5)) or enter_pressed:
+            self.__trigger_callback(True)
 
         imgui.same_line()
 
         if imgui.button("Cancel", get_fill_width()) or imgui.shortcut(imgui.Key.escape):
-            if self._result_cb:
-                self._result_cb(False, self._states)
-            imgui.close_current_popup()
-            self.reset()
+            self.__trigger_callback(False)
 
         imgui.end_popup()

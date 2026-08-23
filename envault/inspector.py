@@ -41,8 +41,11 @@ class Inspector:
     def _save_contents(self, submitted: bool, _):
         self._content_modified = False
         if not submitted:
-            return
-        self.__save()
+            return True
+
+        with exception_dialog() as success:
+            self.__save()
+        return success.ok
 
     def __save(self):
         assert self.ctx.vault and self._current_file

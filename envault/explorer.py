@@ -38,25 +38,46 @@ class Explorer:
 
     def _on_open_vault(self, submitted: bool, states: dict):
         if not submitted:
-            return
-        with exception_dialog():
+            return True
+
+        with exception_dialog() as success:
             self.open_vault(states["Vault Path"], states["Password"])
+
+        return success.ok
 
     def _on_exit_vault(self, submitted: bool, _):
         if not submitted:
-            return
+            return True
         assert not self.ctx.vault is None
 
-        with exception_dialog():
-            self.ctx.vault.close()
-            self.ctx.vault = None
-            self.ctx.selected_file = None
+        self.ctx.vault.close()
+        self.ctx.vault = None
+        self.ctx.selected_file = None
+        return True
 
     def _on_save_vault(self, submitted: bool, states: dict):
         if not submitted:
-            return
-        with exception_dialog():
+            return True
+
+        with exception_dialog() as success:
             self.vault_save_as(states["Destination"])
+
+        return success.ok
+
+    def _on_file_delete(self, is_file: bool, path: Path, submitted: bool, _: dict):
+        if not submitted:
+            return True
+        assert self.ctx.vault and self.ctx.selected_file
+
+        with exception_dialog() as success:
+            if is_file:
+                self.ctx.vault.remove_file(path)
+                if self.ctx.selected_file == path:
+                    self.ctx.selected_file = None
+            else:
+                self.ctx.vault.remove_directory(path)
+
+        return success.ok
 
     def __draw_rename(self) -> bool:
         imgui.set_next_item_width(-1)
@@ -94,13 +115,12 @@ class Explorer:
                     self.ctx.vault.rename_directory(directory, self._rename_buffer)
             else:
                 if not self._uncollapse_path is None:
-                    if is_subpath(directory, self._uncollapse_path):
+                    if self._uncollapse_path == Path("/"):
+                        self._uncollapse_path = None
+                    elif is_subpath(directory, self._uncollapse_path):
                         imgui.set_next_item_open(True)
 
-                    if (
-                        directory == self._uncollapse_path
-                        or self._uncollapse_path == Path("/")
-                    ):
+                    if directory == self._uncollapse_path:
                         self._uncollapse_path = None
 
                 opened = imgui.tree_node_ex(path_to_label(directory, "tree"))
@@ -256,12 +276,9 @@ class Explorer:
                 self.add_duplicate_file(root)
 
             if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_MINUS + " Delete"):
-                if is_file:
-                    self.ctx.vault.remove_file(root)
-                    if self.ctx.selected_file == root:
-                        self.ctx.selected_file = None
-                else:
-                    self.ctx.vault.remove_directory(root)
+                self.ctx.pm.begin("Delete File").add_custom_input(
+                    imgui.text, "Do you want to perminantly delete the file?"
+                ).set_result_cb(lambda x, y: self._on_file_delete(is_file, root, x, y))
 
             imgui.end_popup()
 
@@ -324,9 +341,26 @@ class Explorer:
 
         imgui.end_menu_bar()
 
+    def __handle_shortcuts(self):
+        if self.ctx.vault is None or self.ctx.selected_file is None:
+            return
+
+        if imgui.shortcut(imgui.Key.up_arrow):
+            files = self.ctx.vault.get_all_files()
+            idx = files.index(self.ctx.selected_file)
+            self.ctx.selected_file = files[(idx - 1) % len(files)]
+            self._uncollapse_path = self.ctx.selected_file.parent
+
+        if imgui.shortcut(imgui.Key.down_arrow):
+            files = self.ctx.vault.get_all_files()
+            idx = files.index(self.ctx.selected_file)
+            self.ctx.selected_file = files[(idx + 1) % len(files)]
+            self._uncollapse_path = self.ctx.selected_file.parent
+
     def draw(self):
         imgui.begin("Explorer", flags=imgui.WindowFlags_.menu_bar)
 
+        self.__handle_shortcuts()
         self.__draw_menu()
         self.__draw_file_tree()
 
