@@ -73,11 +73,12 @@ class Inspector:
 
         if menu_with_tooltip(ifa.ICON_FA_FILE_IMPORT, "Import"):
             if menu_item_full("File", True, "Import data from file"):
-                file = pfd.open_file("Import File").result()[0]
-
-                data = Path(file).read_bytes()
-                self.__set_contents(data)
-                self._content_modified = True
+                files = pfd.open_file("Import File").result()
+                if files:
+                    file = files[0]
+                    data = Path(file).read_bytes()
+                    self.__set_contents(data)
+                    self._content_modified = True
 
             if menu_item_full("Clipboard", True, "Import data from clipboard"):
                 data = get_clipboard_bytes()
@@ -89,12 +90,14 @@ class Inspector:
 
         if menu_with_tooltip(ifa.ICON_FA_FILE_EXPORT, "Export"):
             if menu_item_full("File", True, "Export data to file"):
-                save_file = Path(pfd.save_file("Export File").result())
+                file = pfd.save_file("Export File").result()
 
-                if isinstance(self._content, str):
-                    save_file.write_text(self._content)
-                else:
-                    save_file.write_bytes(self._content)
+                if file:
+                    save_file = Path(file)
+                    if isinstance(self._content, str):
+                        save_file.write_text(self._content)
+                    else:
+                        save_file.write_bytes(self._content)
 
             if menu_item_full("Clipboard", True, "Export data to clipboard"):
                 if isinstance(self._content, str):

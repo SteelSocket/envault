@@ -60,7 +60,7 @@ class Explorer:
             return True
 
         with exception_dialog() as success:
-            self.vault_save_as(states["Destination"])
+            self.vault_save_as(states["Save File"])
 
         return success.ok
 
@@ -79,6 +79,12 @@ class Explorer:
 
         return success.ok
 
+    def __file_name_filter(self, data: imgui.InputTextCallbackData):
+        c = chr(data.event_char)
+        if ord(c) < 32 or c in '/\\:*?"<>|':
+            return 1
+        return 0
+
     def __draw_rename(self) -> bool:
         imgui.set_next_item_width(-1)
 
@@ -90,7 +96,9 @@ class Explorer:
             "##rename",
             self._rename_buffer,
             imgui.InputTextFlags_.enter_returns_true
-            | imgui.InputTextFlags_.auto_select_all,
+            | imgui.InputTextFlags_.auto_select_all
+            | imgui.InputTextFlags_.callback_char_filter,
+            self.__file_name_filter,
         )
 
         if finished:
@@ -335,7 +343,7 @@ class Explorer:
         ):
             (
                 self.ctx.pm.begin("Save As")
-                .add_path_input("Destination", "vault.evlt")
+                .add_path_input("Save File", "vault.evlt")
                 .set_result_cb(self._on_save_vault)
             )
 

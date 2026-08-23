@@ -283,7 +283,7 @@ class PopupManager:
         imgui.same_line()
         if imgui.button("Pick File##" + label + "_btr"):
             contents = pfd.save_file(
-                "Pick Vault File", contents, options=pfd.opt.force_overwrite
+                label, contents, options=pfd.opt.force_overwrite
             ).result()
             if contents:
                 self._states[label] = contents
