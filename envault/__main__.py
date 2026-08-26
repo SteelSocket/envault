@@ -1,5 +1,5 @@
 from pathlib import Path
-from imgui_bundle import hello_imgui, immvision, imgui
+from imgui_bundle import hello_imgui, immvision, imgui, imgui_md
 
 from envault.context import AppContext
 from envault.explorer import Explorer
@@ -31,6 +31,9 @@ class App:
 def __load_font():
     hello_imgui.imgui_default_settings.load_default_font_with_font_awesome_icons()
     imgui.get_io().fonts.add_font_default()
+
+    font_loader = imgui_md.get_font_loader_function()
+    font_loader()
 
 
 def get_runner_params(app: App):

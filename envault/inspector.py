@@ -6,6 +6,8 @@ from imgui_bundle import (
     immvision,
     icons_fontawesome_6 as ifa,
     portable_file_dialogs as pfd,
+    imgui_md,
+    hello_imgui,
 )
 
 import numpy as np
@@ -38,6 +40,12 @@ class Inspector:
         self._rename_buffer = ""
         self._rename_started = False
 
+        self._md_image_cache = {}
+        self._md_options = imgui_md.MarkdownOptions()
+        self._md_options.callbacks.on_image = self._on_markdown_image
+
+        imgui_md.initialize_markdown(self._md_options)
+
     def _save_contents(self, submitted: bool, _):
         self._content_modified = False
         if not submitted:
@@ -46,6 +54,35 @@ class Inspector:
         with exception_dialog() as success:
             self.__save()
         return success.ok
+
+    def _on_markdown_image(self, image: str):
+        if not image.startswith("$V"):
+            return imgui_md.on_image_default(image)
+
+        assert self.ctx.vault
+
+        path = Path(image[2:])
+        img = self._md_image_cache.get(path, None)
+
+        if img is None:
+            try:
+                data = self.ctx.vault.read_file(path)
+                img_data = Image.open(BytesIO(data)).convert("RGBA")
+                rgba = np.ascontiguousarray(np.asarray(img_data, dtype=np.uint8))
+                img = hello_imgui.create_texture_gpu_from_rgba_data(rgba)
+                self._md_image_cache[path] = img
+            except FileNotFoundError:
+                return None
+
+        mdimg = imgui_md.MarkdownImage()
+        mdimg.texture_id = img.texture_id()
+        mdimg.size = imgui.ImVec2(img.width, img.height)
+        mdimg.uv0 = imgui.ImVec2(0, 0)
+        mdimg.uv1 = imgui.ImVec2(1, 1)
+        mdimg.col_tint = imgui.ImVec4(1, 1, 1, 1)
+        mdimg.col_border = imgui.ImVec4(0, 0, 0, 0)
+        return mdimg
+
 
     def __save(self):
         assert self.ctx.vault and self._current_file
@@ -157,6 +194,22 @@ class Inspector:
             immvision.image("Vault Image", self._image, self._image_params)
         else:
             center_text("The file is not a image")
+
+        imgui.end_tab_item()
+
+    def __draw_markdown_view(self):
+        if not imgui.begin_tab_item("Markdown")[0]:
+            return
+
+        if imgui.begin_child(
+            "##MVChild",
+            window_flags=imgui.WindowFlags_.horizontal_scrollbar,
+        ):
+            if isinstance(self._content, str):
+                imgui_md.render(self._content)
+            else:
+                center_text("Binary files cannot be viewed in markdown view")
+            imgui.end_child()
 
         imgui.end_tab_item()
 
@@ -303,6 +356,7 @@ class Inspector:
 
         self.__draw_text_editor()
         self.__draw_image_view()
+        self.__draw_markdown_view()
         self.__draw_metadata_view()
 
         imgui.end_tab_bar()
@@ -335,6 +389,7 @@ class Inspector:
                     f"The opened file {self._current_file.name} is not saved! (Submit to save)",
                 ).set_result_cb(self._save_contents)
             elif not self.ctx.pm.is_active():
+                self._md_image_cache.clear()
                 self._current_file = self.ctx.selected_file
                 self.set_file(self._current_file)
 
