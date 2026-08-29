@@ -63,13 +63,37 @@ def get_runner_params(app: App):
     explorer_dock.call_begin_end = False
     explorer_dock.gui_function = lambda: None
 
-    inspector_dock = hello_imgui.DockableWindow()
-    inspector_dock.label = "Inspector"
-    inspector_dock.dock_space_name = "RightSpace"
-    inspector_dock.call_begin_end = False
-    inspector_dock.gui_function = lambda: None
+    text_editor_dock = hello_imgui.DockableWindow()
+    text_editor_dock.label = "Text Editor"
+    text_editor_dock.dock_space_name = "RightSpace"
+    text_editor_dock.call_begin_end = False
+    text_editor_dock.gui_function = lambda: None
 
-    params.docking_params.dockable_windows = [explorer_dock, inspector_dock]
+    image_view_dock = hello_imgui.DockableWindow()
+    image_view_dock.label = "Image View"
+    image_view_dock.dock_space_name = "RightSpace"
+    image_view_dock.call_begin_end = False
+    image_view_dock.gui_function = lambda: None
+
+    markdown_view_dock = hello_imgui.DockableWindow()
+    markdown_view_dock.label = "Markdown View"
+    markdown_view_dock.dock_space_name = "RightSpace"
+    markdown_view_dock.call_begin_end = False
+    markdown_view_dock.gui_function = lambda: None
+
+    metadata_dock = hello_imgui.DockableWindow()
+    metadata_dock.label = "Metadata"
+    metadata_dock.dock_space_name = "RightSpace"
+    metadata_dock.call_begin_end = False
+    metadata_dock.gui_function = lambda: None
+
+    params.docking_params.dockable_windows = [
+        explorer_dock,
+        text_editor_dock,
+        image_view_dock,
+        markdown_view_dock,
+        metadata_dock,
+    ]
     params.callbacks.show_gui = app.gui
 
     return params

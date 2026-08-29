@@ -83,7 +83,6 @@ class Inspector:
         mdimg.col_border = imgui.ImVec4(0, 0, 0, 0)
         return mdimg
 
-
     def __save(self):
         assert self.ctx.vault and self._current_file
 
@@ -158,13 +157,10 @@ class Inspector:
         imgui.end_menu_bar()
 
     def __draw_text_editor(self):
-        if not imgui.begin_tab_item("Text Editor")[0]:
-            return
-
-        if imgui.begin_child(
-            "##TEChild",
-            window_flags=imgui.WindowFlags_.menu_bar | imgui.WindowFlags_.no_scrollbar,
-        ):
+        if imgui.begin(
+            "Text Editor",
+            flags=imgui.WindowFlags_.menu_bar | imgui.WindowFlags_.no_scrollbar,
+        )[0]:
             self.__draw_text_editor_menu()
 
             if isinstance(self._content, str):
@@ -181,37 +177,26 @@ class Inspector:
             else:
                 center_text("Binary files cannot be edited by text editor")
 
-            imgui.end_child()
-
-        imgui.end_tab_item()
+        imgui.end()
 
     def __draw_image_view(self):
-        if not imgui.begin_tab_item("Image Viewer")[0]:
-            return
-        assert self._current_file and self.ctx.vault
+        if imgui.begin("Image View")[0]:
+            assert self._current_file and self.ctx.vault
 
-        if not self._image is None:
-            immvision.image("Vault Image", self._image, self._image_params)
-        else:
-            center_text("The file is not a image")
-
-        imgui.end_tab_item()
+            if not self._image is None:
+                immvision.image("Vault Image", self._image, self._image_params)
+            else:
+                center_text("The file is not a image")
+        imgui.end()
 
     def __draw_markdown_view(self):
-        if not imgui.begin_tab_item("Markdown")[0]:
-            return
-
-        if imgui.begin_child(
-            "##MVChild",
-            window_flags=imgui.WindowFlags_.horizontal_scrollbar,
-        ):
+        if imgui.begin("Markdown View")[0]:
             if isinstance(self._content, str):
                 imgui_md.render(self._content)
             else:
                 center_text("Binary files cannot be viewed in markdown view")
-            imgui.end_child()
 
-        imgui.end_tab_item()
+        imgui.end()
 
     def __draw_rename(self, multi_line: bool = False) -> bool:
         imgui.set_next_item_width(-1)
@@ -261,12 +246,10 @@ class Inspector:
             imgui.end_popup()
 
     def __draw_metadata_view(self):
-        if not imgui.begin_tab_item("Metadata")[0]:
-            return
-        assert self.ctx.vault and self._current_file
-        metadata = self.ctx.vault.get_metadata(self._current_file)
+        if imgui.begin("Metadata")[0]:
+            assert self.ctx.vault and self._current_file
+            metadata = self.ctx.vault.get_metadata(self._current_file)
 
-        if imgui.begin_child("##MetadataViwer"):
             if imgui.begin_table(
                 "MetadataTable",
                 2,
@@ -346,20 +329,13 @@ class Inspector:
                 name = next_string_number("Key", list(metadata.keys()))
                 self.ctx.vault.add_metadata(self._current_file, name, "value")
 
-            imgui.end_child()
+        imgui.end()
 
-        imgui.end_tab_item()
-
-    def __draw_tabs(self):
-        if not imgui.begin_tab_bar("File Actions"):
-            return
-
+    def __draw_windows(self):
         self.__draw_text_editor()
         self.__draw_image_view()
         self.__draw_markdown_view()
         self.__draw_metadata_view()
-
-        imgui.end_tab_bar()
 
     def __set_contents(self, contents: bytes):
         self._content_modified = False
@@ -376,8 +352,6 @@ class Inspector:
             self._image = None
 
     def draw(self):
-        imgui.begin("Inspector", flags=imgui.WindowFlags_.horizontal_scrollbar)
-
         if self._current_file != self.ctx.selected_file:
             if (
                 not self.ctx.pm.is_active()
@@ -394,9 +368,7 @@ class Inspector:
                 self.set_file(self._current_file)
 
         if self._current_file:
-            self.__draw_tabs()
-
-        imgui.end()
+            self.__draw_windows()
 
     def set_file(self, file: Path | None):
         if file is None:
