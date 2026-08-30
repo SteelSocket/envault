@@ -372,7 +372,7 @@ class Inspector:
 
     def set_file(self, file: Path | None):
         if file is None:
-            self._content = ""
+            self.__set_contents(b"")
             return
 
         assert not self.ctx.vault is None

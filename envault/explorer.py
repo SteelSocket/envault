@@ -159,6 +159,8 @@ class Explorer:
                         file,
                         self._rename_buffer,
                     )
+                    if self.ctx.selected_file == file:
+                        self.ctx.selected_file = Path(self._rename_buffer)
 
             else:
                 flags = (
@@ -366,11 +368,10 @@ class Explorer:
             self._uncollapse_path = self.ctx.selected_file.parent
 
     def draw(self):
-        imgui.begin("Explorer", flags=imgui.WindowFlags_.menu_bar)
-
-        self.__handle_shortcuts()
-        self.__draw_menu()
-        self.__draw_file_tree()
+        if imgui.begin("Explorer", flags=imgui.WindowFlags_.menu_bar)[0]:
+            self.__handle_shortcuts()
+            self.__draw_menu()
+            self.__draw_file_tree()
 
         imgui.end()
 
@@ -381,7 +382,11 @@ class Explorer:
 
         if not self.ctx.vault is None:
             self.ctx.vault.close()
-        self.ctx.vault = VaultDB(vpath, password)
+
+        try:
+            self.ctx.vault = VaultDB(vpath, password)
+        except:
+            raise RuntimeError("Wrong Password!")
 
     def vault_save_as(self, path: str):
         assert not self.ctx.vault is None

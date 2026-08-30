@@ -9,7 +9,7 @@ class VaultDB:
         self.path = path
 
         self._connection = sqlite.connect(path.as_posix())
-        self._connection.execute(f"PRAGMA key = {password.replace("'", "''")};")
+        self._connection.execute(f"PRAGMA key = '{password.replace("'", "''")}';")
         self._connection.execute("PRAGMA foreign_keys = ON;")
 
         self._connection.execute("SELECT count(*) FROM sqlite_master;").fetchone()
