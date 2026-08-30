@@ -174,7 +174,7 @@ class Explorer:
 
                 imgui.tree_node_ex(path_to_label(file, "file"), flags)
 
-                if imgui.is_item_clicked():
+                if imgui.is_item_clicked() or imgui.is_item_activated():
                     self.ctx.selected_file = file
 
                 if imgui.is_item_clicked() and imgui.is_mouse_double_clicked(0):
@@ -224,7 +224,7 @@ class Explorer:
         imgui.begin_child(
             "##root_file_drop",
             avail,
-            child_flags=0,
+            child_flags=imgui.ChildFlags_.nav_flattened,
             window_flags=0,
         )
 
@@ -352,7 +352,11 @@ class Explorer:
         imgui.end_menu_bar()
 
     def __handle_shortcuts(self):
-        if self.ctx.vault is None or self.ctx.selected_file is None:
+        if (
+            self.ctx.vault is None
+            or self.ctx.selected_file is None
+            or imgui.get_io().nav_visible
+        ):
             return
 
         if imgui.shortcut(imgui.Key.up_arrow):
@@ -368,7 +372,10 @@ class Explorer:
             self._uncollapse_path = self.ctx.selected_file.parent
 
     def draw(self):
-        if imgui.begin("Explorer", flags=imgui.WindowFlags_.menu_bar)[0]:
+        if imgui.begin(
+            "Explorer",
+            flags=imgui.WindowFlags_.menu_bar,
+        )[0]:
             self.__handle_shortcuts()
             self.__draw_menu()
             self.__draw_file_tree()

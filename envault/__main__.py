@@ -30,7 +30,10 @@ class App:
 
 def __load_font():
     hello_imgui.imgui_default_settings.load_default_font_with_font_awesome_icons()
-    imgui.get_io().fonts.add_font_default()
+
+    io = imgui.get_io()
+    io.fonts.add_font_default()
+    io.config_flags |= imgui.ConfigFlags_.nav_enable_keyboard
 
     font_loader = imgui_md.get_font_loader_function()
     font_loader()

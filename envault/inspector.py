@@ -159,7 +159,9 @@ class Inspector:
     def __draw_text_editor(self):
         if imgui.begin(
             "Text Editor",
-            flags=imgui.WindowFlags_.menu_bar | imgui.WindowFlags_.no_scrollbar,
+            flags=imgui.WindowFlags_.menu_bar
+            | imgui.WindowFlags_.no_scrollbar
+            | imgui.WindowFlags_.no_nav_inputs,
         )[0]:
             self.__draw_text_editor_menu()
 
@@ -180,7 +182,7 @@ class Inspector:
         imgui.end()
 
     def __draw_image_view(self):
-        if imgui.begin("Image View")[0]:
+        if imgui.begin("Image View", flags=imgui.WindowFlags_.no_nav_inputs)[0]:
             assert self._current_file and self.ctx.vault
 
             if not self._image is None:
@@ -190,7 +192,7 @@ class Inspector:
         imgui.end()
 
     def __draw_markdown_view(self):
-        if imgui.begin("Markdown View")[0]:
+        if imgui.begin("Markdown View", flags=imgui.WindowFlags_.no_nav_inputs)[0]:
             if isinstance(self._content, str):
                 imgui_md.render(self._content)
             else:
@@ -229,6 +231,11 @@ class Inspector:
             self._renaming_value = None
             self._rename_started = False
             return True
+
+        if imgui.is_item_deactivated() and self._rename_started:
+            self._renaming_value = None
+            self._rename_started = False
+            return False
 
         return False
 
@@ -278,15 +285,16 @@ class Inspector:
                                 self.ctx.vault.rename_metadata(
                                     self._current_file, key, self._rename_buffer
                                 )
+
                     else:
                         imgui.selectable(key + "##row", False, size=(0, height))
                         if imgui.is_item_hovered():
                             imgui.set_tooltip(
-                                "Double Click to Edit Key, Right Click to open menu"
+                                "Click to Edit Key, Right Click to open menu"
                             )
                         self.__draw_row_ctx_menu(key, "key")
 
-                    if imgui.is_item_clicked() and imgui.is_mouse_double_clicked(0):
+                    if imgui.is_item_activated():
                         self._renaming_value = key
                         self._rename_buffer = key
 
@@ -312,11 +320,11 @@ class Inspector:
 
                         if imgui.is_item_hovered():
                             imgui.set_tooltip(
-                                "Double Click to Edit Key, Right Click to open menu"
+                                "Click to Edit Value, Right Click to open menu"
                             )
                         self.__draw_row_ctx_menu(key, "value")
 
-                        if imgui.is_item_clicked() and imgui.is_mouse_double_clicked(0):
+                        if imgui.is_item_activated():
                             self._renaming_value = f"{key}|{value}"
                             self._rename_buffer = value
 
