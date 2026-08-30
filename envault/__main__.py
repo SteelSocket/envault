@@ -36,6 +36,15 @@ def __load_font():
     font_loader()
 
 
+def __deinitialize():
+    immvision.clear_texture_cache()
+    imgui_md.de_initialize_markdown()
+
+    # Prevents Segfault at python exit
+    imgui_md.initialize_markdown()
+    imgui_md.de_initialize_markdown()
+
+
 def get_runner_params(app: App):
     params = hello_imgui.RunnerParams()
     params.imgui_window_params.default_imgui_window_type = (
@@ -95,6 +104,7 @@ def get_runner_params(app: App):
         metadata_dock,
     ]
     params.callbacks.show_gui = app.gui
+    params.callbacks.before_exit = __deinitialize
 
     return params
 

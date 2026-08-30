@@ -364,6 +364,8 @@ class Inspector:
                 ).set_result_cb(self._save_contents)
             elif not self.ctx.pm.is_active():
                 self._md_image_cache.clear()
+                immvision.clear_texture_cache()
+
                 self._current_file = self.ctx.selected_file
                 self.set_file(self._current_file)
 
