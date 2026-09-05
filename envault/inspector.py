@@ -55,6 +55,14 @@ class Inspector:
             self.__save()
         return success.ok
 
+    def _delete_metadata(self, submitted: bool, state: dict):
+        if not submitted:
+            return True
+        assert self.ctx.vault and self._current_file
+        with exception_dialog() as success:
+            self.ctx.vault.remove_metadata(self._current_file, state["key"])
+        return success.ok
+
     def _on_markdown_image(self, image: str):
         if not image.startswith("$V"):
             return imgui_md.on_image_default(image)
@@ -209,14 +217,14 @@ class Inspector:
 
         if not multi_line:
             finished, self._rename_buffer = imgui.input_text(
-                "##rename",
+                f"##rename_{self._renaming_value}",
                 self._rename_buffer,
                 flags=imgui.InputTextFlags_.enter_returns_true
                 | imgui.InputTextFlags_.auto_select_all,
             )
         else:
             finished, self._rename_buffer = imgui.input_text_multiline(
-                "##rename",
+                f"##rename_{self._renaming_value}",
                 self._rename_buffer,
                 flags=imgui.InputTextFlags_.enter_returns_true
                 | imgui.InputTextFlags_.auto_select_all,
@@ -239,99 +247,55 @@ class Inspector:
 
         return False
 
-    def __draw_row_ctx_menu(self, key: str, suffix: str):
+    def __draw_row(self, key: str, value: str):
         assert self.ctx.vault and self._current_file
-        if imgui.begin_popup_context_item(
-            f"##{key}_{suffix}_context",
-            imgui.PopupFlags_.no_open_over_items
-            | imgui.PopupFlags_.no_open_over_existing_popup
-            | imgui.PopupFlags_.no_reopen,
-        ):
-            if imgui.menu_item_simple(ifa.ICON_FA_CIRCLE_XMARK + " Delete Metadata"):
-                self.ctx.vault.remove_metadata(self._current_file, key)
+        width = imgui.get_content_region_avail()[0]
 
-            imgui.end_popup()
+        imgui.push_style_var(imgui.StyleVar_.button_text_align, imgui.ImVec2(0.0, 0.5))
+
+        if self._renaming_value == key:
+            if self.__draw_rename(False):
+                with exception_dialog():
+                    self.ctx.vault.rename_metadata(
+                        self._current_file, key, self._rename_buffer
+                    )
+        else:
+            if imgui.button(f"{key}##{key}_metadata", (width * 0.425, 0)):
+                self._renaming_value = key
+                self._rename_buffer = key
+
+        imgui.same_line(spacing=5)
+
+        if self._renaming_value == f"{key}|{value}":
+            if self.__draw_rename(True):
+                with exception_dialog():
+                    self.ctx.vault.add_metadata(
+                        self._current_file, key, self._rename_buffer
+                    )
+        else:
+            if imgui.button(f"{value}##{key}_metadata", (width * 0.425, 0)):
+                self._renaming_value = f"{key}|{value}"
+                self._rename_buffer = value
+
+        imgui.same_line(spacing=10)
+        imgui.pop_style_var()
+
+        if imgui.button(f"{ifa.ICON_FA_CIRCLE_XMARK}##{key}_metadata", size=(-1, 0)):
+            (
+                self.ctx.pm.begin("Remove Metadata")
+                .add_custom_input(
+                    imgui.text, f"Confirm to delete the selected metadata '{key}'"
+                )
+                .set_value("key", key)
+                .set_result_cb(self._delete_metadata)
+            )
 
     def __draw_metadata_view(self):
         if imgui.begin("Metadata")[0]:
             assert self.ctx.vault and self._current_file
             metadata = self.ctx.vault.get_metadata(self._current_file)
-
-            if imgui.begin_table(
-                "MetadataTable",
-                2,
-                imgui.TableFlags_.borders
-                | imgui.TableFlags_.row_bg
-                | imgui.TableFlags_.resizable
-                | imgui.TableFlags_.reorderable,
-            ):
-                imgui.table_setup_column("Key", imgui.TableColumnFlags_.width_stretch)
-                imgui.table_setup_column("Value", imgui.TableColumnFlags_.width_stretch)
-                imgui.table_headers_row()
-
-                for key, value in metadata.items():
-                    width = imgui.get_content_region_avail()[0]
-                    text_size = imgui.calc_text_size(value)
-                    height = text_size[1]
-                    pos = imgui.get_cursor_screen_pos()
-
-                    imgui.table_next_row()
-                    imgui.table_next_column()
-                    if self._renaming_value == key:
-                        if self.__draw_rename():
-                            with exception_dialog(
-                                "Conflicting Keys! Key exists with same name!"
-                            ):
-                                self.ctx.vault.rename_metadata(
-                                    self._current_file, key, self._rename_buffer
-                                )
-
-                    else:
-                        imgui.selectable(key + "##row", False, size=(0, height))
-                        if imgui.is_item_hovered():
-                            imgui.set_tooltip(
-                                "Click to Edit Key, Right Click to open menu"
-                            )
-                        self.__draw_row_ctx_menu(key, "key")
-
-                    if imgui.is_item_activated():
-                        self._renaming_value = key
-                        self._rename_buffer = key
-
-                    imgui.table_next_column()
-
-                    if self._renaming_value == f"{key}|{value}":
-                        if self.__draw_rename(True):
-                            self.ctx.vault.add_metadata(
-                                self._current_file, key, self._rename_buffer
-                            )
-                    else:
-                        width = imgui.get_content_region_avail()[0]
-                        text_size = imgui.calc_text_size(value)
-                        height = text_size[1]
-                        pos = imgui.get_cursor_screen_pos()
-
-                        imgui.selectable(
-                            f"##row_{key}_value",
-                            False,
-                            imgui.SelectableFlags_.allow_overlap,
-                            (width, height),
-                        )
-
-                        if imgui.is_item_hovered():
-                            imgui.set_tooltip(
-                                "Click to Edit Value, Right Click to open menu"
-                            )
-                        self.__draw_row_ctx_menu(key, "value")
-
-                        if imgui.is_item_activated():
-                            self._renaming_value = f"{key}|{value}"
-                            self._rename_buffer = value
-
-                        imgui.set_cursor_screen_pos((pos[0], pos[1]))
-                        imgui.text_unformatted(value)
-
-                imgui.end_table()
+            for key, value in metadata.items():
+                self.__draw_row(key, value)
 
             if imgui.button("Add Metadata", (-1, 0)):
                 name = next_string_number("Key", list(metadata.keys()))
