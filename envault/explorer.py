@@ -159,8 +159,8 @@ class Explorer:
                         file,
                         self._rename_buffer,
                     )
-                    if self.ctx.selected_file == file:
-                        self.ctx.selected_file = Path(self._rename_buffer)
+                    if self.ctx.selected_file and self.ctx.selected_file == file:
+                        self.ctx.selected_file = self.ctx.selected_file.parent / self._rename_buffer
 
             else:
                 flags = (
