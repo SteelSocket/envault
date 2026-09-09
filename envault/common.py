@@ -78,6 +78,18 @@ def menu_item_full(
     return ok
 
 
+def toggle_button(label: str, enabled: bool):
+    if enabled:
+        imgui.push_style_color(
+            imgui.Col_.border,
+            imgui.ImVec4(1.0, 1.0, 1.0, 1.0)
+        )
+    activated = imgui.button(label)
+    if enabled:
+        imgui.pop_style_color()
+    return activated ^ enabled
+
+
 def get_clipboard_bytes():
     try:
         img = ImageGrab.grabclipboard()

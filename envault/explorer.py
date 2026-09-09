@@ -1,12 +1,14 @@
 from imgui_bundle import imgui, icons_fontawesome_6 as ifa
 from pathlib import Path
 
+import re
 import shutil
 
 from envault.context import AppContext
 from envault.vault import VaultDB
 from envault.common import (
     center_text,
+    toggle_button,
     exception_dialog,
     menu_item_full,
     next_string_number,
@@ -31,6 +33,12 @@ class Explorer:
         self._rename_started = False
 
         self._uncollapse_path: Path | None = None
+
+        self._search_text: str = ""
+        self._search_regex: bool = False
+        self._search_case: bool = False
+
+        self._shortcut_move: int = 0
 
     @property
     def _vault_exists(self):
@@ -67,7 +75,7 @@ class Explorer:
     def _on_file_delete(self, is_file: bool, path: Path, submitted: bool, _: dict):
         if not submitted:
             return True
-        assert self.ctx.vault and self.ctx.selected_file
+        assert self.ctx.vault
 
         with exception_dialog() as success:
             if is_file:
@@ -112,6 +120,53 @@ class Explorer:
             return True
 
         return False
+
+    def __draw_window_ctx_menu(self):
+        if self.ctx.vault is None:
+            return
+
+        if imgui.begin_popup_context_window(
+            "window_context",
+            imgui.PopupFlags_.no_open_over_existing_popup,
+        ):
+            if imgui.menu_item_simple(ifa.ICON_FA_FOLDER_PLUS + " New Folder"):
+                self.add_new_directory(Path("/"))
+
+            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_PLUS + " New File"):
+                self.add_new_file(Path("/"))
+
+            imgui.end_popup()
+
+    def __draw_file_ctx_menu(self, root: Path, is_file: bool):
+        if self.ctx.vault is None:
+            return
+
+        if imgui.begin_popup_context_item(
+            (root.as_posix() + "_context"),
+            imgui.PopupFlags_.no_open_over_items
+            | imgui.PopupFlags_.no_open_over_existing_popup,
+        ):
+            if imgui.menu_item_simple(ifa.ICON_FA_FOLDER_PLUS + " New Folder"):
+                self.add_new_directory(root.parent if is_file else root)
+
+            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_PLUS + " New File"):
+                self.add_new_file(root.parent if is_file else root)
+
+            imgui.separator()
+
+            if imgui.menu_item_simple(ifa.ICON_FA_FILE_PEN + " Rename"):
+                self._renaming_path = root
+                self._rename_buffer = root.name
+
+            if is_file and imgui.menu_item_simple(ifa.ICON_FA_COPY + " Duplicate"):
+                self.add_duplicate_file(root)
+
+            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_MINUS + " Delete"):
+                self.ctx.pm.begin("Delete File").add_custom_input(
+                    imgui.text, "Do you want to perminantly delete the file?"
+                ).set_result_cb(lambda x, y: self._on_file_delete(is_file, root, x, y))
+
+            imgui.end_popup()
 
     def __draw_tree(self, node):
         if self.ctx.vault is None:
@@ -160,7 +215,9 @@ class Explorer:
                         self._rename_buffer,
                     )
                     if self.ctx.selected_file and self.ctx.selected_file == file:
-                        self.ctx.selected_file = self.ctx.selected_file.parent / self._rename_buffer
+                        self.ctx.selected_file = (
+                            self.ctx.selected_file.parent / self._rename_buffer
+                        )
 
             else:
                 flags = (
@@ -191,22 +248,57 @@ class Explorer:
 
                 self.__draw_file_ctx_menu(file, True)
 
+    def __filter_files(self, files: list):
+        if self._search_text == "":
+            return files
+
+        if self._search_regex:
+            return [
+                x
+                for x in files
+                if re.search(
+                    self._search_text, x.name, 0 if self._search_case else re.IGNORECASE
+                )
+            ]
+
+        if self._search_case:
+            return [x for x in files if x.name.startswith(self._search_text)]
+
+        return [
+            x
+            for x in files
+            if x.name.casefold().startswith(self._search_text.casefold())
+        ]
+
     def __draw_file_tree(self):
         if self.ctx.vault is None:
             return
         tree = {}
 
         dirs = self.ctx.vault.get_all_directories()
-        for directory in dirs:
+        if not self._search_text:
+            for directory in dirs:
+                node = tree
+                current = Path("")
+
+                for part in directory.parts:
+                    current /= part
+                    node = node.setdefault(current, {})
+        elif self._renaming_path in dirs:
             node = tree
             current = Path("")
 
-            for part in directory.parts:
+            for part in self._renaming_path.parts:
                 current /= part
                 node = node.setdefault(current, {})
 
         files = self.ctx.vault.get_all_files()
-        for file in files:
+        filtered = self.__filter_files(files)
+
+        if self._renaming_path in files and not self._renaming_path in filtered:
+            filtered.append(self._renaming_path)
+
+        for file in filtered:
             node = tree
             current = Path("")
 
@@ -215,6 +307,15 @@ class Explorer:
                 node = node.setdefault(current, {})
 
             node.setdefault(None, []).append(file)
+
+        if self._shortcut_move:
+            if self.ctx.selected_file in files:
+                idx = (files.index(self.ctx.selected_file) + self._shortcut_move) % len(
+                    files
+                )
+                self.ctx.selected_file = files[idx]
+                self._uncollapse_path = files[idx].parent
+            self._shortcut_move = 0
 
         if tree.get(Path("/"), {}):
             self.__draw_tree(tree[Path("/")])
@@ -245,52 +346,23 @@ class Explorer:
 
         imgui.end_child()
 
-    def __draw_window_ctx_menu(self):
-        if self.ctx.vault is None:
-            return
+    def __draw_search_bar(self):
+        toggle_size = imgui.calc_text_size("aA")
+        toggle_size.y += 2
 
-        if imgui.begin_popup_context_window(
-            "window_context",
-            imgui.PopupFlags_.no_open_over_existing_popup,
-        ):
-            if imgui.menu_item_simple(ifa.ICON_FA_FOLDER_PLUS + " New Folder"):
-                self.add_new_directory(Path("/"))
+        imgui.push_style_var(imgui.StyleVar_.frame_rounding, 0.0)
 
-            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_PLUS + " New File"):
-                self.add_new_file(Path("/"))
+        self._search_case = toggle_button("aA", self._search_case)
+        imgui.set_item_tooltip("Toogle Case Sensitivity")
+        imgui.same_line(0, 0)
 
-            imgui.end_popup()
+        self._search_regex = toggle_button("(.*)", self._search_regex)
+        imgui.set_item_tooltip("Toogle Regex Search")
+        imgui.same_line(0, 0)
 
-    def __draw_file_ctx_menu(self, root: Path, is_file: bool):
-        if self.ctx.vault is None:
-            return
-
-        if imgui.begin_popup_context_item(
-            (root.as_posix() + "_context"),
-            imgui.PopupFlags_.no_open_over_items
-            | imgui.PopupFlags_.no_open_over_existing_popup,
-        ):
-            if imgui.menu_item_simple(ifa.ICON_FA_FOLDER_PLUS + " New Folder"):
-                self.add_new_directory(root.parent if is_file else root)
-
-            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_PLUS + " New File"):
-                self.add_new_file(root.parent if is_file else root)
-
-            imgui.separator()
-
-            if imgui.menu_item_simple(ifa.ICON_FA_FILE_PEN + " Rename"):
-                self._renaming_path = root
-                self._rename_buffer = root.name
-
-            if is_file and imgui.menu_item_simple(ifa.ICON_FA_COPY + " Duplicate"):
-                self.add_duplicate_file(root)
-
-            if imgui.menu_item_simple(ifa.ICON_FA_FILE_CIRCLE_MINUS + " Delete"):
-                self.ctx.pm.begin("Delete File").add_custom_input(
-                    imgui.text, "Do you want to perminantly delete the file?"
-                ).set_result_cb(lambda x, y: self._on_file_delete(is_file, root, x, y))
-
-            imgui.end_popup()
+        imgui.set_next_item_width(-1)
+        self._search_text = imgui.input_text("##Search Bar", self._search_text)[1]
+        imgui.pop_style_var()
 
     def __draw_menu(self):
         if not imgui.begin_menu_bar():
@@ -360,16 +432,10 @@ class Explorer:
             return
 
         if imgui.shortcut(imgui.Key.up_arrow):
-            files = self.ctx.vault.get_all_files()
-            idx = files.index(self.ctx.selected_file)
-            self.ctx.selected_file = files[(idx - 1) % len(files)]
-            self._uncollapse_path = self.ctx.selected_file.parent
+            self._shortcut_move = -1
 
         if imgui.shortcut(imgui.Key.down_arrow):
-            files = self.ctx.vault.get_all_files()
-            idx = files.index(self.ctx.selected_file)
-            self.ctx.selected_file = files[(idx + 1) % len(files)]
-            self._uncollapse_path = self.ctx.selected_file.parent
+            self._shortcut_move = 1
 
     def draw(self):
         if imgui.begin(
@@ -378,6 +444,7 @@ class Explorer:
         )[0]:
             self.__handle_shortcuts()
             self.__draw_menu()
+            self.__draw_search_bar()
             self.__draw_file_tree()
 
         imgui.end()
