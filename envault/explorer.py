@@ -309,12 +309,12 @@ class Explorer:
             node.setdefault(None, []).append(file)
 
         if self._shortcut_move:
-            if self.ctx.selected_file in files:
-                idx = (files.index(self.ctx.selected_file) + self._shortcut_move) % len(
-                    files
-                )
-                self.ctx.selected_file = files[idx]
-                self._uncollapse_path = files[idx].parent
+            if self.ctx.selected_file in filtered:
+                idx = (
+                    filtered.index(self.ctx.selected_file) + self._shortcut_move
+                ) % len(filtered)
+                self.ctx.selected_file = filtered[idx]
+                self._uncollapse_path = filtered[idx].parent
             self._shortcut_move = 0
 
         if tree.get(Path("/"), {}):
